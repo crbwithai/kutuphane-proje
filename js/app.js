@@ -85,11 +85,20 @@
   const MODES = {
     dis: { label: 'Dışbükey', cam: 1.6, hide: 1.75, radius: () => Math.max(innerWidth * 0.85, G.W / (2 * Math.PI * 0.85)) },
     ic:  { label: 'İçbükey',  cam: 1.1, hide: 1.4,  radius: () => Math.max(innerWidth * 0.62, G.W / (2 * Math.PI * 0.85)) },
+    // Düz (hafif): bükülme, mum titremesi ve cam bulanıklığı yok — zayıf cihazlar için
+    duz: { label: 'Düz',      cam: 1,   hide: Infinity, radius: () => Infinity },
   };
   const MODE_KEY = 'bibliotheca:gorunum';
   const G = { k: 0, P: 1000, hide: 1.75, minV: 0, maxV: 0, W: 0 };
+  const ORDER = ['dis', 'ic', 'duz'];
   let mode = 'dis';
-  try { if (localStorage.getItem(MODE_KEY) === 'ic') mode = 'ic'; } catch (_) { /* varsayılan dışbükey */ }
+  let chosen = false;   // kullanıcı görünümü kendisi seçti mi (otomatik hafif mod buna dokunmaz)
+  try {
+    const saved = localStorage.getItem(MODE_KEY);
+    if (ORDER.includes(saved)) { mode = saved; chosen = true; }
+  } catch (_) { /* varsayılan */ }
+  // Belleği az cihazda baştan hafif mod
+  if (!chosen && navigator.deviceMemory && navigator.deviceMemory <= 4) mode = 'duz';
   let morph = null;     // görünüm geçişi: { from, to, t0 }
   let structure = [];   // { el, u, lift, tail, hidden }
   let slices = [];
@@ -119,7 +128,8 @@
 
   function geometry(m) {
     const R = MODES[m].radius();
-    const g = { k: (m === 'dis' ? 1 : -1) / R, P: MODES[m].cam * R, hide: MODES[m].hide };
+    const flat = !isFinite(R);
+    const g = { k: flat ? 0 : (m === 'dis' ? 1 : -1) / R, P: flat ? 2400 : MODES[m].cam * R, hide: MODES[m].hide };
     const e = edgeArc(g, innerWidth / 2 - 12);   // duvarın uçları ekranın kenarına oturur
     g.minV = -G.W / 2 + e;
     g.maxV = G.W / 2 - e;
@@ -138,15 +148,11 @@
   // Kitaplar bulundukları raf diliminin içine düz yerleşir: dilim başına tek 3B katman.
   // Büyüyen kitap izleyiciye doğru öne çıkar; içbükeyde de komşu dilimin arkasında kalmaz.
   function placeBook(b) {
-    const h = b.h0 * b.m;
     const s = b.el.style;
     s.left = b.x - b.slice.x0 + 'px';
-    // büyüyen kitap korniş üstüne taşmaz; gerekirse aşağı doğru uzar
-    s.top = Math.max(G.ch * 0.5, G.ch + b.rowIndex * (G.rh + G.pt) + G.rh - h) + 'px';
+    s.top = G.ch + b.rowIndex * (G.rh + G.pt) + G.rh - b.h0 + 'px';
     s.width = b.w + 'px';
-    s.height = h + 'px';
-    s.zIndex = b.m > 1.01 ? Math.round(b.m * 10) : '';
-    s.transform = b.m > 1.01 ? `translateZ(${((b.m - 1) * 10).toFixed(1)}px)` : '';
+    s.height = b.h0 + 'px';
     s.setProperty('--bw', b.w.toFixed(2));
     b.u = b.x + b.w / 2 - G.W / 2;
   }
@@ -186,14 +192,13 @@
         b.h0 = b.hk * G.rh;
         b.rowIndex = r;
         b.rx = cx;
-        b.m = 1;
         cx += w + G.gap;
         sec.rows[r].push(b);
       }
       const inner = Math.max(0, ...sec.rows.map(row => row.reduce((s, b) => s + b.w0 + G.gap, 0)));
       sec.x0 = x + G.pad;
       sec.x1 = sec.x0 + inner;
-      sec.rows.forEach(row => { row.sec = sec; row.anchor = -1; row.forEach(b => { b.row = row; b.x0 = b.x = sec.x0 + b.rx; }); });
+      sec.rows.forEach(row => { row.sec = sec; row.forEach((b, j) => { b.row = row; b.ri = j; b.x0 = b.x = sec.x0 + b.rx; }); });
       x = sec.x1 + G.pad;
       postsX.push(x);
       x += G.pw;
@@ -242,11 +247,12 @@
       part(el, (sec.x0 + sec.x1) / 2 - G.W / 2, 4, ' translateX(-50%)');
     });
     drum.prepend(sf);
+    drum.append(lens.el);
+    lens.el.style.top = -G.H / 2 + 'px';   // raf dilimleriyle aynı dikey referans
 
     books.forEach(placeBook);
     dock = null;
-    relaxing.clear();
-    liftSlices.clear();
+    lensReset(null);
     morph = null;
     Object.assign(G, geometry(mode));
     view = target = G.minV + progress * (G.maxV - G.minV);
@@ -260,27 +266,33 @@
       const off = Math.abs(G.k * s) > G.hide;
       if (off !== p.hidden) {
         p.hidden = off;
-        p.el.style.visibility = off ? 'hidden' : '';
+        p.el.style.opacity = off ? '0' : '';   // opacity: katman ve çizimi korunur, geri gelince yeniden çizilmez
       }
       if (off) continue;
       const [x, z, a] = curve(G.k, s);
       p.el.style.transform = `translate3d(${x.toFixed(2)}px,0,${z.toFixed(2)}px) rotateY(${a.toFixed(5)}rad) translateZ(${p.lift}px)${p.tail}`;
     }
+    placeLens();
   }
 
   /* ---------- Görünüm: dışbükey ↔ içbükey ---------- */
   const modeBtn = $('mode');
+  const ARCS = { dis: 'M3 13 Q13 3 23 13', ic: 'M3 5 Q13 15 23 5', duz: 'M3 9 L23 9' };
   function syncModeButton() {
-    const other = mode === 'dis' ? 'ic' : 'dis';
+    const other = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
     modeBtn.dataset.mode = mode;
-    modeBtn.querySelector('.arc').setAttribute('d', mode === 'dis' ? 'M3 13 Q13 3 23 13' : 'M3 5 Q13 15 23 5');
+    modeBtn.querySelector('.arc').setAttribute('d', ARCS[mode]);
     modeBtn.querySelector('.label').textContent = MODES[mode].label;
     modeBtn.setAttribute('aria-label', `Görünüm: ${MODES[mode].label}. ${MODES[other].label} görünüme geç`);
+    document.documentElement.classList.toggle('lite', mode === 'duz');
   }
-  function setMode(m) {
+  function setMode(m, save = true) {
     if (m === mode) return;
     mode = m;
-    try { localStorage.setItem(MODE_KEY, m); } catch (_) { /* yalnızca bu oturum */ }
+    if (save) {
+      chosen = true;
+      try { localStorage.setItem(MODE_KEY, m); } catch (_) { /* yalnızca bu oturum */ }
+    }
     syncModeButton();
     hideTip();
     const to = geometry(m);
@@ -293,7 +305,26 @@
     morph = { from: { k: G.k, P: G.P, hide: G.hide, minV: G.minV, maxV: G.maxV }, to, t0: performance.now() };
     kick();
   }
-  modeBtn.addEventListener('click', () => setMode(mode === 'dis' ? 'ic' : 'dis'));
+  modeBtn.addEventListener('click', () => setMode(ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length]));
+
+  // Kare süresi gözcüsü: açılıştan 1 sn sonra 2 sn izler; cihaz zorlanıyorsa hafif moda geçer
+  function watchFrames() {
+    if (chosen || mode === 'duz') return;
+    const gaps = [];
+    let last = 0;
+    const until = performance.now() + 3000;
+    const step = t => {
+      if (last && t > until - 2000) gaps.push(t - last);
+      last = t;
+      if (t < until) { requestAnimationFrame(step); return; }
+      gaps.sort((a, b) => a - b);
+      if (gaps.length > 10 && gaps[gaps.length >> 1] > 28 && !chosen) {
+        setMode('duz', false);
+        hint.textContent = 'Cihazın için hafif (düz) görünüme geçildi. Sağ üstteki düğmeyle değiştirebilirsin.';
+      }
+    };
+    requestAnimationFrame(step);
+  }
 
   function morphStep(now) {
     const t = clamp((now - morph.t0) / 900, 0, 1);
@@ -310,77 +341,134 @@
     render();
   }
 
-  /* ---------- Dock: imleçteki kitap büyür, komşular raf içinde sıkışır ---------- */
-  let dock = null;              // { b, frac }
-  const relaxing = new Set();   // eski haline dönmekte olan raf katları
-  const liftSlices = new Set(); // içinde öne çıkmış kitap bulunan dilimler
+  /* ---------- Dock: mercek katmanı ----------
+     Raftaki kitaplara dokunulmaz, böylece raf dilimleri her karede yeniden çizilmez. İmlecin
+     çevresindeki kitapların kopyaları ayrı, küçük bir katmanda büyür ve rafın önünde durur.
+     Aslılar hiç gizlenmez (gizlemek raf dilimini yeniden çizdirir): merceğin arkasındaki raf
+     zemini renginde bir şerit onları örter. Büyüme sönünce kopya aslının tam üstüne biner ve
+     kaldırılır — geçiş görünmez. */
+  const LENS_K = 6;   // imlecin iki yanında merceğe alınan kitap sayısı
+  const lens = { el: document.createElement('div'), row: null, hi: 0, u: 0, half: 0, items: new Map(), shown: false };
+  lens.el.className = 'lens';
+  lens.el.setAttribute('aria-hidden', 'true');
+  const lensBg = document.createElement('div');   // aslıları örten raf zemini şeridi
+  lensBg.className = 'lens-bg';
+  lens.el.append(lensBg);
+  let dock = null;    // { b, frac }
 
-  function relayoutRow(row, hi) {
-    const { x0: start, x1: end } = row.sec;
+  function cloneOf(b) {
+    if (!b.clone) {
+      const c = b.el.cloneNode(true);
+      c.removeAttribute('aria-label');
+      c.removeAttribute('data-i');
+      c.tabIndex = -1;
+      c.classList.remove('hit', 'is-out');
+      b.clone = c;
+    }
+    return b.clone;
+  }
+
+  function lensDrop(b) {
+    const it = lens.items.get(b);
+    if (!it) return;
+    it.c.remove();
+    lens.items.delete(b);
+  }
+
+  function lensReset(row) {
+    for (const b of [...lens.items.keys()]) lensDrop(b);
+    lens.row = row;
+    if (!row && lens.shown) { lens.el.style.visibility = 'hidden'; lens.shown = false; }
+  }
+
+  function placeLens() {
+    if (!lens.shown) return;
+    const [x, z, a] = curve(G.k, lens.u - view);
+    // İçbükeyde duvar izleyiciye doğru kıvrılır: düz mercek, kenarlarına kadar duvarın önünde kalsın diye
+    // kavisin o genişlikteki derinliği (sehim ≈ yarıGenişlik² / 2R) kadar öne alınır.
+    const lift = 8 + (G.k < 0 ? lens.half * lens.half * -G.k / 2 : 0);
+    lens.el.style.transform = `translate3d(${x.toFixed(2)}px,0,${z.toFixed(2)}px) rotateY(${a.toFixed(5)}rad) translateZ(${lift.toFixed(1)}px)`;
+  }
+
+  // Merkezdeki kitap yerinde kalır; diğerleri büyüdükçe iki yana açılır
+  function layoutLens() {
+    const row = lens.row;
+    const hi = lens.hi;
     const c = row[hi];
-    const center = c.x0 + c.w0 / 2;
-    c.w = c.w0 * c.m;
-    c.x = center - c.w / 2;
-
-    let sumL = 0;
-    for (let j = 0; j < hi; j++) sumL += row[j].w0 * row[j].m;
-    const kL = sumL ? clamp((c.x - start - hi * G.gap) / sumL, 0.3, 1) : 1;
-    let edge = c.x - G.gap;
-    for (let j = hi - 1; j >= 0; j--) {
-      const b = row[j];
-      b.w = b.w0 * b.m * kL;
-      b.x = edge - b.w;
-      edge = b.x - G.gap;
+    const m = b => (lens.items.get(b) || { m: 1 }).m;
+    let lo = hi, up = hi;
+    for (const b of lens.items.keys()) { lo = Math.min(lo, b.ri); up = Math.max(up, b.ri); }
+    const left = new Map();
+    const cw = c.w0 * m(c);
+    left.set(c, -cw / 2);
+    let edge = -cw / 2 - G.gap;
+    for (let j = hi - 1; j >= lo; j--) { const w = row[j].w0 * m(row[j]); edge -= w; left.set(row[j], edge); edge -= G.gap; }
+    edge = cw / 2 + G.gap;
+    for (let j = hi + 1; j <= up; j++) { left.set(row[j], edge); edge += row[j].w0 * m(row[j]) + G.gap; }
+    const rowBottom = G.ch + c.rowIndex * (G.rh + G.pt) + G.rh;
+    for (const [b, it] of lens.items) {
+      const w = b.w0 * it.m;
+      const h = b.h0 * it.m;
+      const st = it.c.style;
+      st.left = left.get(b) + 'px';
+      st.width = w + 'px';
+      st.height = h + 'px';
+      st.top = Math.max(G.ch * 0.5, rowBottom - h) + 'px';   // korniş üstüne taşmaz, gerekirse aşağı uzar
+      st.zIndex = Math.round(it.m * 10);
+      st.setProperty('--bw', w.toFixed(2));
     }
-
-    let sumR = 0;
-    for (let j = hi + 1; j < row.length; j++) sumR += row[j].w0 * row[j].m;
-    const kR = sumR ? clamp((end - (c.x + c.w) - (row.length - 1 - hi) * G.gap) / sumR, 0.3, 1) : 1;
-    edge = c.x + c.w + G.gap;
-    for (let j = hi + 1; j < row.length; j++) {
-      const b = row[j];
-      b.w = b.w0 * b.m * kR;
-      b.x = edge;
-      edge += b.w + G.gap;
-    }
-    row.forEach(placeBook);
+    lens.u = c.x0 + c.w0 / 2 - G.W / 2;
+    let minL = Infinity, maxR = -Infinity;
+    for (const [b, it] of lens.items) { minL = Math.min(minL, left.get(b)); maxR = Math.max(maxR, left.get(b) + b.w0 * it.m); }
+    lens.half = Math.max(-minL, maxR);
+    const bg = lensBg.style;   // şerit yalnızca raf katının iç boşluğunu kaplar
+    bg.left = minL - 1 + 'px';
+    bg.width = maxR - minL + 2 + 'px';
+    bg.top = rowBottom - G.rh + 'px';
+    bg.height = G.rh + 'px';
+    if (!lens.shown) { lens.el.style.visibility = ''; lens.shown = true; }
+    placeLens();
   }
 
   function dockStep() {
-    const rows = new Set(relaxing);
-    if (dock) rows.add(dock.b.row);
-    let moving = false;
-    for (const row of rows) {
-      const active = dock && dock.b.row === row;
-      if (active) row.anchor = row.indexOf(dock.b);
-      const hi = row.anchor;
-      let still = false;
-      row.forEach((b, j) => {
-        const goal = active ? 1 + (MAG - 1) * Math.exp(-((j - hi - dock.frac) ** 2) / (2 * SIGMA * SIGMA)) : 1;
-        const next = reduceMotion.matches ? goal : b.m + (goal - b.m) * 0.24;
-        b.m = Math.abs(next - goal) < 0.003 ? goal : next;
-        if (b.m !== goal) still = true;
-      });
-      relayoutRow(row, hi);
-      if (active) relaxing.delete(row);
-      else if (still) relaxing.add(row);
-      else relaxing.delete(row);
-      if (still) moving = true;
+    if (!dock && !lens.items.size) return false;
+    if (dock && lens.row !== dock.b.row) lensReset(dock.b.row);
+    const row = lens.row;
+    if (dock) lens.hi = dock.b.ri;
+    const lo = dock ? Math.max(0, lens.hi - LENS_K) : 0;
+    const up = dock ? Math.min(row.length - 1, lens.hi + LENS_K) : -1;
+    for (let j = lo; j <= up; j++) {
+      const b = row[j];
+      if (!lens.items.has(b)) {
+        const c = cloneOf(b);
+        lens.el.append(c);
+        lens.items.set(b, { c, m: 1 });
+      }
     }
-    // Öne çıkan kitabı olan dilimler 3B bağlamı korur (translateZ düzleşmesin), diğerleri düz kalır
-    const now = new Set();
-    for (const row of rows) for (const b of row) if (b.m > 1.01) now.add(b.slice);
-    for (const sl of liftSlices) if (!now.has(sl)) { sl.el.classList.remove('lift'); liftSlices.delete(sl); }
-    for (const sl of now) if (!liftSlices.has(sl)) { sl.el.classList.add('lift'); liftSlices.add(sl); }
+    let moving = false;
+    for (const [b, it] of lens.items) {
+      const inWindow = dock && b.ri >= lo && b.ri <= up;
+      const goal = inWindow ? 1 + (MAG - 1) * Math.exp(-((b.ri - lens.hi - dock.frac) ** 2) / (2 * SIGMA * SIGMA)) : 1;
+      const next = reduceMotion.matches ? goal : it.m + (goal - it.m) * 0.24;
+      it.m = Math.abs(next - goal) < 0.003 ? goal : next;
+      if (it.m !== goal) moving = true;
+    }
+    layoutLens();
+    for (const [b, it] of lens.items) {
+      if (it.m === 1 && !(dock && b.ri >= lo && b.ri <= up)) lensDrop(b);   // sönen kitap rafa döner
+    }
+    if (!lens.items.size) lensReset(null);
     return moving;
   }
 
   function setDock(b, frac = 0) {
-    if (dock && dock.b.row !== (b && b.row)) relaxing.add(dock.b.row);
     dock = b ? { b, frac } : null;
     if (b) loadDetail(b.d.id).catch(() => {});   // üzerine gelinen kitabın ayrıntısını önceden çek
     kick();
   }
+
+  // Büyümüşse kopyanın, değilse rafın üstündeki kitabın ekran dikdörtgeni
+  const rectOf = b => (lens.items.has(b) ? lens.items.get(b).c : b.el).getBoundingClientRect();
 
   /* ---------- Künye etiketi: büyüyen kitabın tepesinin üstünde, onu örtmeden ---------- */
   let tipBook = null;
@@ -394,7 +482,7 @@
     }
     tip.classList.add('show');
     const t = tip.getBoundingClientRect();
-    const r = b.el.getBoundingClientRect();
+    const r = rectOf(b);
     let y = r.top - t.height - 10;
     if (y < header.offsetHeight + 4) y = r.bottom + 10;
     const x = clamp(r.left + r.width / 2 - t.width / 2, 8, innerWidth - t.width - 8);
@@ -423,7 +511,7 @@
     if ((rotating || morphing) && ptr) hoverAt(ptr.x, ptr.y);
     if (pendingTip && view === target && !morph) { showTip(pendingTip); pendingTip = null; }
     else if (tipBook && dock && dock.b === tipBook && docking) showTip(tipBook);
-    if (view !== target || morph || docking || relaxing.size) kick();
+    if (view !== target || morph || docking) kick();
   }
 
   function go(u) {
@@ -431,11 +519,14 @@
     kick();
   }
 
-  // Büyümüş kitabın kapladığı alan ona aittir: dilim sınırında komşu dilim öne geçse de
-  // imleç/dokunuş büyümüş kitaptan kaymaz.
+  // Mercekteki (büyümüş) kitapların kapladığı alan onlara aittir; en çok büyümüş olan önceliklidir
   const inside = (x, y, r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   function bookAt(x, y) {
-    if (dock && inside(x, y, dock.b.el.getBoundingClientRect())) return dock.b;
+    let best = null, bestM = 0;
+    for (const [b, it] of lens.items) {
+      if (it.m > bestM && inside(x, y, it.c.getBoundingClientRect())) { best = b; bestM = it.m; }
+    }
+    if (best) return best;
     const hit = document.elementFromPoint(x, y);
     const el = hit && hit.closest('.drum .bk');
     return el ? books[el.dataset.i] : null;
@@ -448,7 +539,7 @@
       hideTip();
       return;
     }
-    const r = b.el.getBoundingClientRect();
+    const r = rectOf(b);
     const frac = clamp((x - r.left) / r.width - 0.5, -0.5, 0.5);
     if (!dock || dock.b !== b || Math.abs(dock.frac - frac) > 0.02) setDock(b, frac);
     showTip(b);
@@ -668,9 +759,10 @@
   function openReader(b) {
     current = b;
     fill(b);
-    b.el.classList.add('is-out');
     hideTip();
     setDock(null);
+    lensReset(null);
+    b.el.classList.add('is-out');
     reader.showPopover();
   }
 
@@ -944,13 +1036,22 @@
 
   /* ---------- Başlat ---------- */
   let resizeRaf = 0;
+  // Yerleşim yalnızca ölçüler gerçekten değişince yeniden kurulur (tüm rafların yeniden çizilmesi pahalı)
+  let laidOut = '';
+  function relayout() {
+    const key = `${innerWidth}x${innerHeight}x${header.offsetHeight}x${hint.offsetHeight}`;
+    if (key === laidOut) return;
+    laidOut = key;
+    layout();
+  }
   addEventListener('resize', () => {
-    if (!resizeRaf) resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; layout(); });
+    if (!resizeRaf) resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; relayout(); });
   });
   defaultHint();
   renderFavs();
   syncModeButton();
-  layout();
+  relayout();
+  watchFrames();
   // Yazı tipleri gelince üst bant yüksekliği değişebilir
-  if (document.fonts) document.fonts.ready.then(layout);
+  if (document.fonts) document.fonts.ready.then(relayout);
 })();

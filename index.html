@@ -22,10 +22,9 @@
       --candle: 255, 176, 92;
       --display: 'Grenze Gotisch', 'EB Garamond', Georgia, serif;
       --serif: 'EB Garamond', Georgia, serif;
-      /* ince kâğıt/taş dokusu */
-      --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-      /* kâğıt yüzeyler için daha hafif, sıcak tonlu doku */
-      --grain-soft: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .35  0 0 0 0 .24  0 0 0 0 .1  0 0 0 .2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+      /* doku görselleri (taş/deri ve parşömen) */
+      --grain: url("assets/grain.png");          /* tools/dokular.py üretir */
+      --grain-soft: url("assets/grain-soft.png"); /* kâğıt yüzeyler: sıcak tonlu, hafif */
     }
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; }
@@ -87,6 +86,14 @@
       -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
     }
     .veil[hidden] { display: none; }
+
+    /* Hafif mod (Düz görünüm): zayıf cihazlarda pahalı efektler kapanır */
+    .lite .candle { animation: none; }
+    .lite .drawer, .lite .results, .lite .veil { -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .lite .drawer { background: rgba(20, 14, 8, .97); }
+    .lite .results { background: rgba(22, 15, 9, .97); }
+    .lite .veil { background: rgba(8, 6, 4, .55); }
+    .lite .shaft { filter: none; opacity: .6; }
     @media (max-width: 640px) {
       header { gap: 8px; padding: 8px 10px; }
       .brand span { display: none; }
@@ -131,9 +138,11 @@
     .drum > * { position: absolute; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
 
     /* ---------- Kitaplık dilimleri: korniş + raf gözleri + kaide ---------- */
-    .slice { display: flex; flex-direction: column; }
+    .slice { display: flex; flex-direction: column; contain: layout style; }   /* yerleşim yalıtımı: bir dilimdeki değişiklik sayfanın geri kalanını yeniden hesaplatmaz */
     .slice .bk { position: absolute; }
-    .slice.lift { transform-style: preserve-3d; }   /* öne çıkan (büyüyen) kitap düzleşmesin */
+    .lens { left: 0; top: 0; width: 0; height: 0; pointer-events: none; contain: layout style; }   /* dock merceği: büyüyen kitap kopyaları */
+    .lens .bk, .lens-bg { position: absolute; }
+    .lens-bg { background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,.2) 14px, transparent 26px), linear-gradient(#150d07, #110a05); }
     .slice .cornice {
       height: var(--ch);
       background:
@@ -196,6 +205,15 @@
     }
     .bk span { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 86%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 2px rgba(0,0,0,.5); pointer-events: none; }
     .bk.b-vellum span { text-shadow: none; font-style: italic; }
+    /* Rafta minik yazılar okunmuyordu ve açılışta çizimi en pahalı kısımdı (ölçüm: takılma 1,6 sn → 0,4 sn).
+       Raftaki sırtta yazı satırını andıran yaldız çizgiler durur; okunur başlık mercekte büyüyen kopyada çıkar. */
+    .slice .bk span { display: none; }
+    .slice .bk::before {
+      content: ''; position: absolute; left: 41%; right: 41%; top: 20%; bottom: 24%;
+      background: repeating-linear-gradient(to bottom, var(--g) 0 1.6px, transparent 1.6px 2.6px, var(--g) 2.6px 3.4px, transparent 3.4px 5.2px);
+      opacity: .5; border-radius: 1px;
+    }
+    .slice .bk.b-label::before { top: 26%; bottom: 30%; }
     /* kabartma sırt bantları */
     .bk.b-bands {
       background:
