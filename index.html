@@ -38,43 +38,81 @@
        ÜST BANT
        ========================================================= */
     header {
-      position: fixed; inset: 0 0 auto; z-index: 50;
-      display: flex; align-items: center; gap: 16px; padding: 10px 20px;
-      background: linear-gradient(to bottom, rgba(10,8,6,.92), rgba(10,8,6,.55) 70%, transparent);
+      position: fixed; top: 12px; left: 16px; right: 16px; z-index: 50;
+      display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 10px 0 12px;
+      border-radius: 16px;
+      background: rgba(20, 14, 9, .62);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+      box-shadow: inset 0 0 0 1px rgba(233,219,182,.10), 0 12px 32px -12px rgba(0,0,0,.7);
+      font-size: 16px;
     }
-    .brand { font: 700 30px/1 var(--display); color: var(--parch); text-decoration: none; letter-spacing: .01em; white-space: nowrap; }
-    .brand b { color: var(--rubric); font-weight: 700; }
-    .search { flex: 1; display: flex; max-width: 520px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--parch-l); text-decoration: none; white-space: nowrap; border-radius: 10px; }
+    .brand .mono {
+      display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+      font: 700 24px/1 var(--display); color: var(--parch-l);
+      background: linear-gradient(145deg, #b13a24, #7a2215);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 4px 10px -4px rgba(0,0,0,.6);
+    }
+    .brand .word { font: 700 24px/1 var(--display); letter-spacing: .01em; }
+
+    .search { position: relative; flex: 1; max-width: 560px; margin: 0 auto; }
+    .search .icon { position: absolute; left: 14px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); color: rgba(233,219,182,.55); pointer-events: none; }
     .search input {
-      flex: 1; min-width: 0; padding: 8px 14px; border: 1px solid #8f7a52; border-right: 0; border-radius: 2px 0 0 2px;
-      background: var(--grain-soft), var(--parch); color: var(--ink); font-size: 17px;
+      width: 100%; height: 40px; padding: 0 44px 0 40px; border-radius: 999px;
+      border: 1px solid rgba(233,219,182,.14); background: rgba(255,255,255,.06);
+      color: var(--parch-l); font-size: 16px; outline: none;
+      transition: background .15s, border-color .15s, box-shadow .15s;
     }
-    .search input::placeholder { color: #7d6a4f; font-style: italic; }
-    .search button, .tab {
-      border: 1px solid #5b3d22; background: linear-gradient(var(--oak-l), var(--oak)); color: var(--parch-l);
-      padding: 8px 16px; cursor: pointer; letter-spacing: .06em; font-variant: small-caps;
+    .search input::placeholder { color: rgba(233,219,182,.5); font-style: italic; }
+    .search input:hover { background: rgba(255,255,255,.09); }
+    .search input:focus { background: rgba(255,255,255,.1); border-color: rgba(210,176,106,.6); box-shadow: 0 0 0 3px rgba(210,176,106,.18); }
+    .search input::-webkit-search-cancel-button { filter: invert(.8) sepia(.4); cursor: pointer; }
+    .search kbd {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; display: grid; place-items: center;
+      font: 500 13px/1 var(--serif); color: rgba(233,219,182,.6);
+      border: 1px solid rgba(233,219,182,.18); pointer-events: none;
     }
-    .search button { border-radius: 0 2px 2px 0; }
-    .search button:hover, .tab:hover { background: linear-gradient(var(--oak-hi), var(--oak-l)); }
-    .tab { display: flex; align-items: center; gap: 8px; border-radius: 2px; white-space: nowrap; }
-    .tab .count { min-width: 22px; padding: 0 6px; border-radius: 2px; background: var(--rubric); color: var(--parch-l); font-variant: normal; font-size: 14px; }
-    .tab .mark { display: none; }
-    .mode { display: flex; align-items: center; gap: 8px; }
-    .mode svg { width: 26px; height: 18px; flex: none; }
-    .mode .arc { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .search input:focus ~ kbd, .search input:not(:placeholder-shown) ~ kbd { display: none; }
+
+    /* ortak hap düğme */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid rgba(233,219,182,.14); background: rgba(255,255,255,.06); color: var(--parch-l);
+      cursor: pointer; white-space: nowrap; font-size: 16px;
+      transition: background .15s, border-color .15s, transform .1s;
+    }
+    .btn:hover { background: rgba(255,255,255,.11); border-color: rgba(233,219,182,.24); }
+    .btn:active { transform: translateY(1px); }
+    .btn svg { width: 18px; height: 18px; flex: none; }
+    .btn .count {
+      min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
+      background: #b13a24; color: #fff7e6; font-size: 12px; font-weight: 600;
+    }
+
+    /* görünüm seçici: üç bölümlü */
+    .modes { display: flex; gap: 2px; padding: 3px; height: 40px; border-radius: 999px; border: 1px solid rgba(233,219,182,.14); background: rgba(255,255,255,.05); }
+    .modes button {
+      display: grid; place-items: center; width: 40px; border: 0; border-radius: 999px; cursor: pointer;
+      background: transparent; color: rgba(233,219,182,.6); transition: background .15s, color .15s;
+    }
+    .modes button:hover { color: var(--parch-l); background: rgba(255,255,255,.07); }
+    .modes button[aria-checked="true"] { color: #241608; background: linear-gradient(var(--gilt-l), var(--gilt)); }
+    .modes svg { width: 22px; height: 16px; }
+    .modes path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 
     /* Arama sonuçları: yarı saydam, arkası bulanık panel */
     .search { position: relative; }
     .results {
       position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 2;
       max-height: min(62dvh, 520px); overflow-y: auto; overscroll-behavior: contain;
-      margin: 0; padding: 6px 0; list-style: none; border-radius: 3px;
-      background: rgba(22, 15, 9, .55);
+      margin: 0; padding: 6px; list-style: none; border-radius: 14px;
+      background: rgba(22, 15, 9, .62);
       -webkit-backdrop-filter: blur(18px) saturate(1.25); backdrop-filter: blur(18px) saturate(1.25);
       box-shadow: inset 0 0 0 1px rgba(173,133,56,.38), 0 24px 60px -18px rgba(0,0,0,.85);
     }
     .results[hidden] { display: none; }
-    .results li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 14px; cursor: pointer; }
+    .results li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
     .results li b { font: 700 20px/1.15 var(--display); color: var(--parch-l); }
     .results li i { grid-column: 1; color: rgba(233,219,182,.72); font-size: 16px; }
     .results li small { grid-row: 1 / 3; grid-column: 2; align-self: center; font-variant: small-caps; letter-spacing: .08em; color: var(--gilt-l); }
@@ -94,14 +132,14 @@
     .lite .results { background: rgba(22, 15, 9, .97); }
     .lite .veil { background: rgba(8, 6, 4, .55); }
     .lite .shaft { filter: none; opacity: .6; }
-    @media (max-width: 640px) {
-      header { gap: 8px; padding: 8px 10px; }
-      .brand span { display: none; }
-      .tab .label, .mode .label { display: none; }
-      .mode { padding: 8px 10px; }
-      .tab .mark { display: inline; }
-      .tab { padding: 8px 10px; }
-      .search input { font-size: 16px; }
+    @media (max-width: 760px) {
+      header { top: 8px; left: 8px; right: 8px; gap: 8px; height: 52px; padding: 0 6px 0 8px; }
+      .brand .word, .btn .label, .search kbd { display: none; }
+      .brand .mono { width: 34px; height: 34px; font-size: 22px; }
+      .btn { padding: 0 10px; }
+      .modes { padding: 3px; }
+      .modes button { width: 34px; }
+      .modes button[aria-checked="false"] { display: none; }   /* yalnızca etkin görünüm; dokununca sıradakine geçer */
     }
 
     /* =========================================================
@@ -141,8 +179,7 @@
     .slice { display: flex; flex-direction: column; contain: layout style; }   /* yerleşim yalıtımı: bir dilimdeki değişiklik sayfanın geri kalanını yeniden hesaplatmaz */
     .slice .bk { position: absolute; }
     .lens { left: 0; top: 0; width: 0; height: 0; pointer-events: none; contain: layout style; }   /* dock merceği: büyüyen kitap kopyaları */
-    .lens .bk, .lens-bg { position: absolute; }
-    .lens-bg { background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,.2) 14px, transparent 26px), linear-gradient(#150d07, #110a05); }
+    .lens .bk { position: absolute; }
     .slice .cornice {
       height: var(--ch);
       background:
@@ -277,10 +314,11 @@
     .drawer h2 { margin: 0; font: 700 40px/1.1 var(--display); }
     .drawer .lead { margin: 6px 0 0; font-style: italic; color: rgba(233,219,182,.78); }
     .x {
-      position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; display: grid; place-items: center;
-      border: 1px solid rgba(233,219,182,.3); border-radius: 2px; background: transparent; cursor: pointer;
+      position: absolute; top: 16px; right: 16px; width: 38px; height: 38px; display: grid; place-items: center;
+      border: 1px solid rgba(233,219,182,.18); border-radius: 999px; background: rgba(255,255,255,.06); cursor: pointer;
+      transition: background .15s;
     }
-    .x:hover { background: rgba(255,255,255,.08); }
+    .x:hover { background: rgba(255,255,255,.14); }
     .fav-list { list-style: none; margin: 22px 0 0; padding: 0; border-top: 1px solid rgba(233,219,182,.18); }
     .fav-list li { display: flex; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(233,219,182,.18); }
     .fav-list .open { flex: 1; text-align: left; padding: 0; border: 0; background: none; cursor: pointer; }
@@ -377,17 +415,26 @@
     .source a { color: var(--lapis); }
     .actions { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-top: 22px; }
     .seal {
-      padding: 8px 16px; border: 1px solid #6e2416; border-radius: 2px; cursor: pointer;
-      background: transparent; color: #6e2416; font-variant: small-caps; letter-spacing: .06em; font-size: 17px;
+      display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 999px; cursor: pointer;
+      border: 1px solid rgba(122,34,21,.45); background: rgba(122,34,21,.06); color: #7a2215; font-size: 17px;
+      transition: background .15s, color .15s, border-color .15s;
     }
-    .seal[aria-pressed="true"] { background: var(--rubric); color: var(--parch-l); border-color: var(--rubric); }
-    .actions a { color: var(--lapis); font-variant: small-caps; letter-spacing: .06em; font-size: 17px; }
+    .seal:hover { background: rgba(122,34,21,.12); border-color: rgba(122,34,21,.7); }
+    .seal[aria-pressed="true"] { background: linear-gradient(145deg, #b13a24, #7a2215); color: #fff7e6; border-color: transparent; }
+    .actions a {
+      display: inline-flex; align-items: center; height: 42px; padding: 0 6px; color: var(--lapis); font-size: 17px;
+      text-decoration: underline; text-decoration-color: rgba(44,71,120,.35); text-underline-offset: 4px;
+    }
+    .actions a:hover { text-decoration-color: currentColor; }
 
     .r-close {
-      position: absolute; top: -12px; right: -12px; z-index: 10; width: 40px; height: 40px; border-radius: 50%;
-      display: grid; place-items: center; cursor: pointer; border: 1px solid #1b120a;
-      background: radial-gradient(circle at 35% 30%, #8a3a24, #5a1e12); color: var(--parch-l);
+      position: absolute; top: -14px; right: -14px; z-index: 10; width: 42px; height: 42px; border-radius: 999px;
+      display: grid; place-items: center; cursor: pointer; border: 0; color: #fff7e6;
+      background: linear-gradient(145deg, #b13a24, #7a2215);
+      box-shadow: 0 8px 20px -8px rgba(0,0,0,.8), inset 0 0 0 1px rgba(255,255,255,.12);
+      transition: transform .15s;
     }
+    .r-close:hover { transform: scale(1.06); }
 
     /* açılış: önce cilt kapağı, sonra bir yaprak döner */
     .flap, .flip {
@@ -419,20 +466,23 @@
 
 <body>
   <header>
-    <a class="brand" href="#" aria-label="Bibliotheca ana sayfa"><b>B</b><span>ibliotheca</span></a>
+    <a class="brand" href="#" aria-label="Bibliotheca ana sayfa"><span class="mono" aria-hidden="true">B</span><span class="word">Bibliotheca</span></a>
     <form id="search" class="search" role="search">
       <label for="q" class="sr-only">Eser veya yazar ara</label>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Eser ya da yazar ara…" autocomplete="off" spellcheck="false"
              role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
-      <button type="submit">Ara</button>
+      <kbd aria-hidden="true">/</kbd>
       <ul id="results" class="results" role="listbox" aria-label="Arama sonuçları" hidden></ul>
     </form>
-    <button type="button" id="mode" class="tab mode" data-mode="dis">
-      <svg viewBox="0 0 26 18" aria-hidden="true"><path class="arc" d="M3 13 Q13 3 23 13"/></svg>
-      <span class="label">Dışbükey</span>
-    </button>
-    <button type="button" class="tab" popovertarget="drawer">
-      <span class="label">Okuma Köşem</span><span class="mark" aria-hidden="true">❦</span>
+    <div id="modes" class="modes" role="radiogroup" aria-label="Kitaplık görünümü">
+      <button type="button" role="radio" data-mode="dis" aria-checked="true" aria-label="Dışbükey" title="Dışbükey"><svg viewBox="0 0 26 18" aria-hidden="true"><path d="M3 13 Q13 3 23 13"/></svg></button>
+      <button type="button" role="radio" data-mode="ic" aria-checked="false" aria-label="İçbükey" title="İçbükey — seni saran"><svg viewBox="0 0 26 18" aria-hidden="true"><path d="M3 5 Q13 15 23 5"/></svg></button>
+      <button type="button" role="radio" data-mode="duz" aria-checked="false" aria-label="Düz (hafif)" title="Düz — hafif görünüm"><svg viewBox="0 0 26 18" aria-hidden="true"><path d="M3 9 L23 9"/></svg></button>
+    </div>
+    <button type="button" class="btn" popovertarget="drawer" aria-label="Okuma Köşem">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+      <span class="label">Okuma Köşem</span>
       <span class="count" id="fav-count-nav">0</span>
     </button>
   </header>

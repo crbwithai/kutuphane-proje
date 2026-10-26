@@ -159,7 +159,7 @@
 
   function layout() {
     const progress = G.maxV > G.minV ? (target - G.minV) / (G.maxV - G.minV) : 0;
-    const top = header.offsetHeight + 4;
+    const top = header.getBoundingClientRect().bottom + 4;   // üst bant yüzer: alt kenarı esas
     const avail = Math.max(320, innerHeight - top - hint.offsetHeight - 22);
 
     G.rows = avail < 560 ? 5 : 7;
@@ -276,14 +276,13 @@
   }
 
   /* ---------- Görünüm: dışbükey ↔ içbükey ---------- */
-  const modeBtn = $('mode');
-  const ARCS = { dis: 'M3 13 Q13 3 23 13', ic: 'M3 5 Q13 15 23 5', duz: 'M3 9 L23 9' };
+  const modeGroup = $('modes');
   function syncModeButton() {
-    const other = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
-    modeBtn.dataset.mode = mode;
-    modeBtn.querySelector('.arc').setAttribute('d', ARCS[mode]);
-    modeBtn.querySelector('.label').textContent = MODES[mode].label;
-    modeBtn.setAttribute('aria-label', `Görünüm: ${MODES[mode].label}. ${MODES[other].label} görünüme geç`);
+    for (const btn of modeGroup.querySelectorAll('button')) {
+      const on = btn.dataset.mode === mode;
+      btn.setAttribute('aria-checked', on);
+      btn.tabIndex = on ? 0 : -1;   // radyo grubu: tek Tab durağı, oklarla gezinilir
+    }
     document.documentElement.classList.toggle('lite', mode === 'duz');
   }
   function setMode(m, save = true) {
@@ -305,25 +304,39 @@
     morph = { from: { k: G.k, P: G.P, hide: G.hide, minV: G.minV, maxV: G.maxV }, to, t0: performance.now() };
     kick();
   }
-  modeBtn.addEventListener('click', () => setMode(ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length]));
+  modeGroup.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-mode]');
+    if (!btn) return;
+    // Dar ekranda yalnızca etkin simge görünür: ona dokunmak sıradaki görünüme geçirir
+    const m = btn.dataset.mode === mode ? ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length] : btn.dataset.mode;
+    setMode(m);
+    if (document.activeElement === btn) modeGroup.querySelector(`[data-mode="${m}"]`).focus();
+  });
+  modeGroup.addEventListener('keydown', e => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    e.stopPropagation();   // kitaplığı döndürmesin
+    const next = ORDER[(ORDER.indexOf(mode) + step + ORDER.length) % ORDER.length];
+    setMode(next);
+    modeGroup.querySelector(`[data-mode="${next}"]`).focus();
+  });
 
-  // Kare süresi gözcüsü: açılıştan 1 sn sonra 2 sn izler; cihaz zorlanıyorsa hafif moda geçer
-  function watchFrames() {
-    if (chosen || mode === 'duz') return;
-    const gaps = [];
-    let last = 0;
-    const until = performance.now() + 3000;
-    const step = t => {
-      if (last && t > until - 2000) gaps.push(t - last);
-      last = t;
-      if (t < until) { requestAnimationFrame(step); return; }
-      gaps.sort((a, b) => a - b);
-      if (gaps.length > 10 && gaps[gaps.length >> 1] > 28 && !chosen) {
-        setMode('duz', false);
-        hint.textContent = 'Cihazın için hafif (düz) görünüme geçildi. Sağ üstteki düğmeyle değiştirebilirsin.';
-      }
-    };
-    requestAnimationFrame(step);
+  // Kare süresi gözcüsü: yalnızca sayfa gerçekten çalışırken (dönme, dock, görünüm geçişi) art arda
+  // gelen animasyon karelerini ölçer — tarayıcıların boştaki sayfada kare hızını kısması hesaba girmez.
+  // 40 kare toplanınca bir kez karar verir: dörtte üçü 50 ms'yi aşıyorsa (sürekli 20 fps altı) hafif mod.
+  const watch = { samples: [], last: 0, done: false };
+  function watchFrame(now) {
+    if (watch.done || chosen || mode === 'duz' || document.hidden) return;
+    if (watch.last && now - watch.last < 600) watch.samples.push(now - watch.last);   // daha uzunu: döngü durmuştu
+    watch.last = now;
+    if (watch.samples.length < 40) return;
+    watch.done = true;
+    const g = watch.samples.sort((a, b) => a - b);
+    if (g[g.length >> 2] > 50) {
+      setMode('duz', false);
+      hint.textContent = 'Cihazın için hafif (düz) görünüme geçildi. Sağ üstteki düğmeyle değiştirebilirsin.';
+    }
   }
 
   function morphStep(now) {
@@ -343,17 +356,13 @@
 
   /* ---------- Dock: mercek katmanı ----------
      Raftaki kitaplara dokunulmaz, böylece raf dilimleri her karede yeniden çizilmez. İmlecin
-     çevresindeki kitapların kopyaları ayrı, küçük bir katmanda büyür ve rafın önünde durur.
-     Aslılar hiç gizlenmez (gizlemek raf dilimini yeniden çizdirir): merceğin arkasındaki raf
-     zemini renginde bir şerit onları örter. Büyüme sönünce kopya aslının tam üstüne biner ve
-     kaldırılır — geçiş görünmez. */
+     çevresindeki kitapların kopyaları ayrı, küçük bir katmanda büyür ve rafın önünde durur;
+     büyüyen kitapların aslı o sırada gizlenir (odaktaki kitap odaklanabilir kalır). Büyüme sönünce
+     kopya aslının tam üstüne biner ve kaldırılır — geçiş görünmez. */
   const LENS_K = 6;   // imlecin iki yanında merceğe alınan kitap sayısı
   const lens = { el: document.createElement('div'), row: null, hi: 0, u: 0, half: 0, items: new Map(), shown: false };
   lens.el.className = 'lens';
   lens.el.setAttribute('aria-hidden', 'true');
-  const lensBg = document.createElement('div');   // aslıları örten raf zemini şeridi
-  lensBg.className = 'lens-bg';
-  lens.el.append(lensBg);
   let dock = null;    // { b, frac }
 
   function cloneOf(b) {
@@ -372,6 +381,7 @@
     const it = lens.items.get(b);
     if (!it) return;
     it.c.remove();
+    b.el.style.visibility = b.el.style.opacity = '';
     lens.items.delete(b);
   }
 
@@ -421,11 +431,6 @@
     let minL = Infinity, maxR = -Infinity;
     for (const [b, it] of lens.items) { minL = Math.min(minL, left.get(b)); maxR = Math.max(maxR, left.get(b) + b.w0 * it.m); }
     lens.half = Math.max(-minL, maxR);
-    const bg = lensBg.style;   // şerit yalnızca raf katının iç boşluğunu kaplar
-    bg.left = minL - 1 + 'px';
-    bg.width = maxR - minL + 2 + 'px';
-    bg.top = rowBottom - G.rh + 'px';
-    bg.height = G.rh + 'px';
     if (!lens.shown) { lens.el.style.visibility = ''; lens.shown = true; }
     placeLens();
   }
@@ -443,6 +448,9 @@
         const c = cloneOf(b);
         lens.el.append(c);
         lens.items.set(b, { c, m: 1 });
+        // Aslı gizlenir; odaktaki kitap opacity ile (visibility odağı düşürür)
+        if (b.el === document.activeElement) b.el.style.opacity = '0';
+        else b.el.style.visibility = 'hidden';
       }
     }
     let moving = false;
@@ -484,7 +492,7 @@
     const t = tip.getBoundingClientRect();
     const r = rectOf(b);
     let y = r.top - t.height - 10;
-    if (y < header.offsetHeight + 4) y = r.bottom + 10;
+    if (y < header.getBoundingClientRect().bottom + 4) y = r.bottom + 10;
     const x = clamp(r.left + r.width / 2 - t.width / 2, 8, innerWidth - t.width - 8);
     tip.style.transform = `translate(${x}px, ${clamp(y, 8, innerHeight - t.height - 8)}px)`;
   }
@@ -499,6 +507,7 @@
 
   function tick(now) {
     raf = 0;
+    watchFrame(now);
     const morphing = !!morph;
     if (morph) morphStep(now);
     const d = target - view;
@@ -512,6 +521,7 @@
     if (pendingTip && view === target && !morph) { showTip(pendingTip); pendingTip = null; }
     else if (tipBook && dock && dock.b === tipBook && docking) showTip(tipBook);
     if (view !== target || morph || docking) kick();
+    else watch.last = 0;   // döngü durdu: sonraki ölçüm yeni bir ardışık diziyle başlar
   }
 
   function go(u) {
@@ -599,6 +609,7 @@
   /* ---------- Klavye ---------- */
   addEventListener('keydown', e => {
     if (popoverOpen() || (e.target.closest && e.target.closest('input, textarea'))) return;
+    if (e.key === '/' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $('q').focus(); return; }
     if (e.key === 'ArrowRight') { go(target + 260); e.preventDefault(); }
     if (e.key === 'ArrowLeft') { go(target - 260); e.preventDefault(); }
   });
@@ -1039,7 +1050,7 @@
   // Yerleşim yalnızca ölçüler gerçekten değişince yeniden kurulur (tüm rafların yeniden çizilmesi pahalı)
   let laidOut = '';
   function relayout() {
-    const key = `${innerWidth}x${innerHeight}x${header.offsetHeight}x${hint.offsetHeight}`;
+    const key = `${innerWidth}x${innerHeight}x${header.getBoundingClientRect().bottom}x${hint.offsetHeight}`;
     if (key === laidOut) return;
     laidOut = key;
     layout();
@@ -1051,7 +1062,6 @@
   renderFavs();
   syncModeButton();
   relayout();
-  watchFrames();
   // Yazı tipleri gelince üst bant yüksekliği değişebilir
   if (document.fonts) document.fonts.ready.then(relayout);
 })();
